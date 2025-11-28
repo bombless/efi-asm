@@ -80,6 +80,9 @@ code_start equ $ - $$
 
 ; EfiMain(ImageHandle, SystemTable)
 EfiMain:
+    mov [image_handle], rcx
+    mov [system_table], rdx
+
     push    rbx
     push    r12
     push    r13
@@ -117,6 +120,23 @@ EfiMain:
     call    [rbx + 8]
     
     mov     rdi, r12            ; SystemTable 地址
+    lea     rsi, [rel hex_buffer]
+    call    uint64_to_hex
+    
+    mov     rcx, rbx
+    lea     rdx, [rel hex_buffer]
+    call    [rbx + 8]
+    
+    mov     rcx, rbx
+    lea     rdx, [rel newline]
+    call    [rbx + 8]
+
+    ; ========== 再次打印 SystemTable 地址 ==========
+    mov     rcx, rbx
+    lea     rdx, [rel msg_systable]
+    call    [rbx + 8]
+    
+    mov     rdi, [system_table]            ; SystemTable 地址
     lea     rsi, [rel hex_buffer]
     call    uint64_to_hex
     
@@ -189,6 +209,9 @@ uint64_to_hex:
 
 
 ; ==================== 数据区 ====================
+image_handle: dq -1
+system_table: dq -1
+
 msg_conout:
     dw 'C','o','n','O','u','t',' ','a','d','d','r',':',' ',0
 
