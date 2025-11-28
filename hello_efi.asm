@@ -1,4 +1,4 @@
-; 独立 UEFI Hello World - 直接生成 .efi 文件
+; 独立 UEFI Hello World - 带地址打印功能
 ; 编译: nasm -f bin hello_efi.asm -o hello.efi
 
 BITS 64
@@ -80,46 +80,133 @@ code_start equ $ - $$
 
 ; EfiMain(ImageHandle, SystemTable)
 EfiMain:
-    sub     rsp, 40
-    mov     [rsp + 32], rdx     ; 保存 SystemTable
+    push    rbx
+    push    r12
+    push    r13
+    sub     rsp, 64             ; 栈空间（包含临时缓冲区）
 
-    ; 获取并保存 ConOut
+    ; 保存重要值
+    mov     r12, rdx            ; r12 = SystemTable
     mov     rax, [rdx + 64]     ; ConOut
-    mov     [rsp + 24], rax     ; 保存 ConOut 指针
-
-    ; 调用 OutputString(hello_str1)
-    mov     rcx, [rsp + 24]     ; 恢复 ConOut
-    lea     rdx, [rel hello_str1]
-    call    [rcx + 8]
-
-    ; 调用 OutputString(hello_str2)
-    mov     rcx, [rsp + 24]     ; 重新加载 ConOut
-    lea     rdx, [rel hello_str2]
-    call    [rcx + 8]
-
-    ; 调用 OutputString(hello_str3)
-    mov     rcx, [rsp + 24]     ; 重新加载 ConOut
-    lea     rdx, [rel hello_str3]
-    call    [rcx + 8]
+    mov     rbx, rax            ; rbx = ConOut (保存到 callee-saved 寄存器)
     
-    ; 无限循环（可选，防止程序立即退出）
+    ; ========== 打印提示信息 ==========
+    mov     rcx, rbx
+    lea     rdx, [rel msg_conout]
+    call    [rbx + 8]
+    
+    ; ========== 打印 ConOut 地址 ==========
+    ; rbx 已经是 ConOut 的地址值
+    mov     rdi, rbx            ; 要打印的地址值
+    lea     rsi, [rel hex_buffer] ; 输出缓冲区
+    call    uint64_to_hex       ; 转换为十六进制字符串
+    
+    ; 打印地址
+    mov     rcx, rbx
+    lea     rdx, [rel hex_buffer]
+    call    [rbx + 8]
+    
+    ; 打印换行
+    mov     rcx, rbx
+    lea     rdx, [rel newline]
+    call    [rbx + 8]
+    
+    ; ========== 打印 SystemTable 地址 ==========
+    mov     rcx, rbx
+    lea     rdx, [rel msg_systable]
+    call    [rbx + 8]
+    
+    mov     rdi, r12            ; SystemTable 地址
+    lea     rsi, [rel hex_buffer]
+    call    uint64_to_hex
+    
+    mov     rcx, rbx
+    lea     rdx, [rel hex_buffer]
+    call    [rbx + 8]
+    
+    mov     rcx, rbx
+    lea     rdx, [rel newline]
+    call    [rbx + 8]
+    
+    ; ========== 打印 Hello World ==========
+    mov     rcx, rbx
+    lea     rdx, [rel hello_str1]
+    call    [rbx + 8]
+    mov     rcx, rbx
+    lea     rdx, [rel hello_str2]
+    call    [rbx + 8]
+
+    ; 无限循环
 .wait_loop:
     hlt
     jmp     .wait_loop
-    
-    ; 或者直接返回
-    ; xor    eax, eax
-    ; add    rsp, 40
-    ; ret
 
-; 数据
+
+; ==================== 辅助函数 ====================
+; uint64_to_hex: 将 64 位数转换为十六进制 Unicode 字符串
+; 输入: rdi = 要转换的数值
+;       rsi = 输出缓冲区指针 (需要至少 38 字节: "0x" + 16字符 + 换行 + null，每字符2字节)
+; 破坏: rax, rcx, rdx, rdi, rsi
+uint64_to_hex:
+    push    rbx
+    
+    ; 写入 "0x" 前缀
+    mov     word [rsi], '0'
+    mov     word [rsi + 2], 'x'
+    add     rsi, 4
+    
+    ; 转换 16 个十六进制数字（从高位到低位）
+    mov     rcx, 16             ; 16 个 nibbles
+    
+.convert_loop:
+    ; 取最高 4 位
+    mov     rax, rdi
+    shr     rax, 60             ; 移动最高 4 位到最低位
+    
+    ; 转换为 ASCII
+    cmp     al, 10
+    jb      .is_digit
+    add     al, 'A' - 10        ; A-F
+    jmp     .store_char
+.is_digit:
+    add     al, '0'             ; 0-9
+    
+.store_char:
+    mov     word [rsi], ax      ; 存储 Unicode 字符
+    add     rsi, 2
+    
+    ; 左移 4 位，处理下一个 nibble
+    shl     rdi, 4
+    
+    dec     rcx
+    jnz     .convert_loop
+    
+    ; 写入 null 终止符
+    mov     word [rsi], 0
+    
+    pop     rbx
+    ret
+
+
+; ==================== 数据区 ====================
+msg_conout:
+    dw 'C','o','n','O','u','t',' ','a','d','d','r',':',' ',0
+
+msg_systable:
+    dw 'S','y','s','T','a','b','l','e',' ','a','d','d','r',':',' ',0
+
 hello_str1:
-    dw 'H','e','l','l','o',' ','W','o','r','l','d','1',13,10,0,0
+    dw 'H','e','l','l','o',' ','W','o','r','l','d','1',13,10,0
+
 hello_str2:
-    dw 'H','e','l','l','o',' ','W','o','r','l','d','2',13,10,0,0
-hello_str3:
-    dw 'H','e','l','l','o',' ','W','o','r','l','d','3',13,10,0,0
-image_handle:        dq -1
+    dw 'H','e','l','l','o',' ','W','o','r','l','d','2',13,10,0
+
+newline:
+    dw 13, 10, 0
+
+; 十六进制输出缓冲区 (需要空间: 2 + 16 + 1 = 19 个 Unicode 字符 = 38 字节)
+hex_buffer:
+    times 40 db 0
 
 code_size equ ($ - code_section + 0x1FF) & ~0x1FF
 image_size equ ($ - $$ + 0xFFF) & ~0xFFF
