@@ -294,6 +294,11 @@ EfiMain:
     mov     rcx, [rel conOut]
     lea     rdx, [rel hello_str1]
     call    [rel OutputString]
+
+        ; Output hello message
+    mov rcx, [rel conOut]
+    lea rdx, [rel helloMessage]
+    call [rel OutputString]
     
 
     ; 无限循环
@@ -351,6 +356,11 @@ uint64_to_hex:
 ; ==================== 数据区 ====================
 image_handle: dq -1
 system_table: dq -1
+
+helloMessage:
+    dw 'S', 'T', 'A', 'R', 'T', 'I', 'N', 'G', ' ', 'U', 'E', 'F', 'I', ' ', 'P', 'R', 'G', 13, 10
+    dw 'W', 'R', 'I', 'T', 'T', 'E', 'N', ' ', 'B', 'Y', ' '
+    dw 'I', 'N', 'K', 'B', 'O', 'X', 13, 10, 0
 
 ; ========== UEFI 函数指针存储 ==========
 conIn:              dq 0
