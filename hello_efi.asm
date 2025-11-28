@@ -80,15 +80,27 @@ code_start equ $ - $$
 
 ; EfiMain(ImageHandle, SystemTable)
 EfiMain:
-    sub     rsp, 40             ; 栈空间
+    sub     rsp, 40
+    mov     [rsp + 32], rdx     ; 保存 SystemTable
 
-    ; 获取 SystemTable->ConOut
+    ; 获取并保存 ConOut
     mov     rax, [rdx + 64]     ; ConOut
-    
-    ; 调用 OutputString
-    mov     rcx, rax            ; This = ConOut
-    lea     rdx, [rel hello_str]; String
-    call    [rax + 8]           ; ConOut->OutputString
+    mov     [rsp + 24], rax     ; 保存 ConOut 指针
+
+    ; 调用 OutputString(hello_str1)
+    mov     rcx, [rsp + 24]     ; 恢复 ConOut
+    lea     rdx, [rel hello_str1]
+    call    [rcx + 8]
+
+    ; 调用 OutputString(hello_str2)
+    mov     rcx, [rsp + 24]     ; 重新加载 ConOut
+    lea     rdx, [rel hello_str2]
+    call    [rcx + 8]
+
+    ; 调用 OutputString(hello_str3)
+    mov     rcx, [rsp + 24]     ; 重新加载 ConOut
+    lea     rdx, [rel hello_str3]
+    call    [rcx + 8]
     
     ; 无限循环（可选，防止程序立即退出）
 .wait_loop:
@@ -101,8 +113,13 @@ EfiMain:
     ; ret
 
 ; 数据
-hello_str:
-    dw 'H','e','l','l','o',' ','W','o','r','l','d','!',13,10,0
+hello_str1:
+    dw 'H','e','l','l','o',' ','W','o','r','l','d','1',13,10,0,0
+hello_str2:
+    dw 'H','e','l','l','o',' ','W','o','r','l','d','2',13,10,0,0
+hello_str3:
+    dw 'H','e','l','l','o',' ','W','o','r','l','d','3',13,10,0,0
+image_handle:        dq -1
 
 code_size equ ($ - code_section + 0x1FF) & ~0x1FF
 image_size equ ($ - $$ + 0xFFF) & ~0xFFF
