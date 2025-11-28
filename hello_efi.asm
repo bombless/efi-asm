@@ -78,6 +78,132 @@ align 512
 code_section:
 code_start equ $ - $$
 
+
+; ========== OUTPUT64BITNUMBER 宏 ==========
+%macro OUTPUT64BITNUMBER 1
+    push rax
+    push rcx
+    push rdx
+    push r8
+    mov rdi, %1
+    lea rsi, [rel hex_buffer]
+    call uint64_to_hex
+    mov rcx, [rel conOut]
+    lea rdx, [rel hex_buffer]
+    call [rel OutputString]
+    mov rcx, [rel conOut]
+    lea rdx, [rel newline]
+    call [rel OutputString]
+    pop r8
+    pop rdx
+    pop rcx
+    pop rax
+%endmacro
+
+%macro GETUEFIFUNCTIONS 0
+    ; RDX = SystemTable
+    mov rax, qword [rdx + 0x30]     ; ConIn
+    mov [rel conIn], rax
+    mov rax, qword [rdx + 0x40]     ; ConOut
+    mov [rel conOut], rax
+    mov rax, qword [rdx + 0x58]     ; RuntimeServices
+    mov [rel RuntimeServices], rax
+    mov rax, qword [rdx + 0x60]     ; BootServices
+    mov [rel BootServices], rax
+    
+    mov rax, [rel conOut]
+    mov r8, qword [rax + 0x08]
+    mov [rel OutputString], r8
+    mov r8, qword [rax + 0x38]
+    mov [rel SetCursorPosition], r8
+    
+    mov rax, [rel BootServices]
+    mov r8, qword [rax + 0x28]
+    mov [rel AllocatePages], r8
+    mov r8, qword [rax + 0x60]
+    mov [rel WaitForEvent], r8
+    mov r8, qword [rax + 0x138]
+    mov [rel LocateHandleBuffer], r8
+    mov r8, qword [rax + 0x140]
+    mov [rel LocateProtocol], r8
+    
+    mov rax, [rel conIn]
+    mov r8, qword [rax + 0x08]
+    mov [rel ReadKeyStroke], r8
+    mov r8, qword [rax + 0x10]
+    mov [rel WaitForKey], r8
+    
+    mov rax, [rel RuntimeServices]
+    mov r8, qword [rax + 0x18]
+    mov [rel getTime], r8
+    
+    ; Locate TextInputEX
+    lea rcx, [rel TextInputExGUID]
+    xor rdx, rdx
+    lea r8, [rel TextInputEX]
+    call [rel LocateProtocol]
+    OUTPUT64BITNUMBER 0
+    
+    mov rax, [rel TextInputEX]
+    mov r8, qword [rax + 0x20]
+    mov [rel RegisterKeyNotify], r8
+
+    ; Locate GraphicsOutputProtocol
+    lea rcx, [rel GraphicsOutputGUID]
+    xor rdx, rdx
+    lea r8, [rel GOP]
+    call [rel LocateProtocol]
+    OUTPUT64BITNUMBER 0
+    
+    mov rax, [rel GOP]
+    mov r8, qword [rax]
+    mov [rel queryMode], r8
+    mov r8, qword [rax + 0x08]
+    mov [rel setMode], r8
+    mov r8, qword [rax + 0x10]
+    mov [rel BLT], r8
+    mov r8, qword [rax + 0x18]
+    mov [rel mode], r8
+    lea rax, [rel mode]
+    mov rbx, [rax]
+    mov eax, [rbx]
+    mov dword [rel maxMode], eax
+    
+    ; Locate MPServicesProtocol
+    lea rcx, [rel MPServicesGUID]
+    xor rdx, rdx
+    lea r8, [rel MPServices]
+    call [rel LocateProtocol]
+    OUTPUT64BITNUMBER 0
+    
+    mov rax, [rel MPServices]
+    mov r8, qword [rax]
+    mov [rel GetNumberOfAP], r8
+    mov r8, qword [rax + 0x10]
+    mov [rel StartupAllAPs], r8
+    mov r8, qword [rax + 0x18]
+    mov [rel StartupThisAP], r8
+    mov r8, qword [rax + 0x28]
+    mov [rel EnableDisableAP], r8
+    
+    mov rcx, [rel conOut]
+    lea rdx, [rel mouseMessage]
+    call [rel OutputString]
+    
+    ; Locate SIMPLEPOINTER
+    lea rcx, [rel SIMPLEPOINTERGUID]
+    xor rdx, rdx
+    lea r8, [rel SIMPLEPOINTER]
+    call [rel LocateProtocol]
+    OUTPUT64BITNUMBER 0
+    
+    mov rax, [rel SIMPLEPOINTER]
+    mov r8, qword [rax + 0x08]
+    mov [rel POINTERGETSTATESMP], r8
+    mov r8, qword [rax + 0x18]
+    mov [rel POINTERMODE], r8
+%endmacro
+
 ; EfiMain(ImageHandle, SystemTable)
 EfiMain:
     mov [image_handle], rcx
@@ -92,7 +218,7 @@ EfiMain:
     mov     r12, rdx            ; r12 = SystemTable
     mov     rax, [rdx + 64]     ; ConOut
     mov     rbx, rax            ; rbx = ConOut (保存到 callee-saved 寄存器)
-    
+
     ; ========== 打印提示信息 ==========
     mov     rcx, rbx
     lea     rdx, [rel msg_conout]
@@ -156,6 +282,20 @@ EfiMain:
     lea     rdx, [rel hello_str2]
     call    [rbx + 8]
 
+    
+    ; 获取 UEFI 函数
+    
+    mov rcx, [image_handle]
+    mov rdx, [system_table]
+
+    GETUEFIFUNCTIONS
+
+    
+    mov     rcx, [rel conOut]
+    lea     rdx, [rel hello_str1]
+    call    [rel OutputString]
+    
+
     ; 无限循环
 .wait_loop:
     hlt
@@ -211,6 +351,80 @@ uint64_to_hex:
 ; ==================== 数据区 ====================
 image_handle: dq -1
 system_table: dq -1
+
+; ========== UEFI 函数指针存储 ==========
+conIn:              dq 0
+conOut:             dq 0
+RuntimeServices:    dq 0
+BootServices:       dq 0
+
+; ConOut 函数
+OutputString:       dq 0
+SetCursorPosition:  dq 0
+
+; BootServices 函数
+AllocatePages:      dq 0
+WaitForEvent:       dq 0
+LocateHandleBuffer: dq 0
+LocateProtocol:     dq 0
+
+; ConIn 函数
+ReadKeyStroke:      dq 0
+WaitForKey:         dq 0
+
+; RuntimeServices 函数
+getTime:            dq 0
+
+; TextInputEX
+TextInputEX:        dq 0
+RegisterKeyNotify:  dq 0
+
+; Graphics Output Protocol (GOP)
+GOP:                dq 0
+queryMode:          dq 0
+setMode:            dq 0
+BLT:                dq 0
+mode:               dq 0
+maxMode:            dd 0
+
+; MP Services Protocol
+MPServices:         dq 0
+GetNumberOfAP:      dq 0
+StartupAllAPs:      dq 0
+StartupThisAP:      dq 0
+EnableDisableAP:    dq 0
+
+; Simple Pointer Protocol
+SIMPLEPOINTER:      dq 0
+POINTERGETSTATESMP: dq 0
+POINTERMODE:        dq 0
+
+; ========== GUIDs ==========
+align 8
+TextInputExGUID:
+    dd 0xDD9E7534
+    dw 0x7762, 0x4698
+    db 0x8C, 0x14, 0xF5, 0x85, 0x17, 0xA6, 0x25, 0xAA
+
+GraphicsOutputGUID:
+    dd 0x9042A9DE
+    dw 0x23DC, 0x4A38
+    db 0x96, 0xFB, 0x7A, 0xDE, 0xD0, 0x80, 0x51, 0x6A
+
+MPServicesGUID:
+    dd 0x3FDDA605
+    dw 0xA76E, 0x4F46
+    db 0xAD, 0x29, 0x12, 0xF4, 0x53, 0x1B, 0x3D, 0x08
+
+SIMPLEPOINTERGUID:
+    dd 0x31878C87
+    dw 0x0B75, 0x11D5
+    db 0x9A, 0x4F, 0x00, 0x90, 0x27, 0x3F, 0xC1, 0x4D
+
+; ========== 消息字符串 ==========
+mouseMessage:
+    dw 'L','o','c','a','t','i','n','g',' ','M','o','u','s','e','.','.','.',13,10,0
+
 
 msg_conout:
     dw 'C','o','n','O','u','t',' ','a','d','d','r',':',' ',0
