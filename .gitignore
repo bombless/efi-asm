@@ -3,3 +3,4 @@
 /hello.obj
 /hello.efi
 /DEBUGX64_OVMF.fd
+/qemu_log*.txt
